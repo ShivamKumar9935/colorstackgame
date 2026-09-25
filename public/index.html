@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Stack Online</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root {
+  --bg:#f6f4ef;
+  --card:#ffffff;
+  --card-soft:#faf9f6;
+  --text:#222;
+  --muted:#777;
+  --border:#dedbd4;
+  --accent:#222;
+  --accent-contrast:#fff;
+  --pink:#ed5f9d;
+  --cyan:#49bdd5;
+  --yellow:#e8c443;
+  --green:#62b97a;
+  --danger:#d6536d;
+  --slot-border:#e2dfd7;
+  --shadow:0 1px 2px rgba(0,0,0,.04);
+}
+[data-theme="dark"] {
+  --bg:#16151b;
+  --card:#201f27;
+  --card-soft:#26252e;
+  --text:#f1efe9;
+  --muted:#9b98a5;
+  --border:#37353f;
+  --accent:#f1efe9;
+  --accent-contrast:#16151b;
+  --slot-border:#3a3844;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100vh;
+  font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  transition:background .2s,color .2s;
+}
+button,input{font:inherit}
+button{cursor:pointer}
+.app{max-width:1100px;margin:auto;padding:28px 18px 60px}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+h1{margin:0;font-size:clamp(28px,5vw,46px);letter-spacing:-.04em}
+.subtitle{color:var(--muted);margin-top:5px}
+.iconBtn{
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+  width:40px;height:40px;border-radius:12px;font-size:17px;
+  display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);
+  flex:0 0 auto;
+}
+.topRightBtns{display:flex;gap:8px}
+.panel{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:22px;
+  padding:20px;
+  margin-top:20px;
+  box-shadow:var(--shadow);
+}
+.form{max-width:480px;margin:40px auto}
+input{
+  width:100%;
+  padding:13px 14px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  margin-top:8px;
+  outline:none;
+  background:var(--card);
+  color:var(--text);
+}
+input:focus{border-color:var(--muted)}
+label{display:block;font-size:13px;font-weight:700;margin-top:14px}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+.btn{
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--text);
+  padding:11px 15px;
+  border-radius:12px;
+  font-weight:750;
+  transition:transform .08s, opacity .15s;
+}
+.btn:active{transform:scale(.96)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-contrast);border-color:var(--accent)}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn.small{padding:8px 12px;font-size:13px;border-radius:10px}
+.hidden{display:none!important}
+.room{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap
+}
+.codeRow{display:flex;align-items:center;gap:8px}
+.code{
+  font-size:25px;font-weight:900;letter-spacing:.16em;
+  padding:10px 15px;background:var(--card-soft);border-radius:12px
+}
+.status{color:var(--muted);font-size:14px}
+.gameTop{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;flex-wrap:wrap
+}
+.timer{font-size:26px;font-weight:900;font-variant-numeric:tabular-nums}
+.timer.lowTime{color:var(--danger);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.boards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.playerCard{
+  border:1px solid var(--border);border-radius:18px;padding:14px;
+  background:var(--card-soft)
+}
+.playerHead{
+  display:flex;justify-content:space-between;gap:8px;align-items:center;
+  font-weight:850;margin-bottom:6px
+}
+.progressWrap{height:6px;border-radius:4px;background:var(--border);overflow:hidden;margin-bottom:14px}
+.progressBar{height:100%;background:var(--green);transition:width .25s}
+.rack{
+  display:grid;grid-template-columns:repeat(6,1fr);gap:8px;
+  align-items:end
+}
+.tubeWrap{height:220px;display:flex;align-items:flex-end;justify-content:center}
+.tube{
+  width:min(54px,100%);
+  height:198px;
+  padding:6px 4px;
+  border:2px solid #c8cbd0;
+  border-top:0;
+  border-radius:0 0 16px 16px;
+  background:linear-gradient(90deg,rgba(255,255,255,.8),rgba(255,255,255,.25),rgba(255,255,255,.65));
+  display:flex;flex-direction:column-reverse;gap:4px;
+  justify-content:flex-start;
+  transition:.12s;
+  position:relative;
+}
+[data-theme="dark"] .tube{
+  border-color:#4a4855;
+  background:linear-gradient(90deg,rgba(255,255,255,.06),rgba(255,255,255,.02),rgba(255,255,255,.05));
+}
+.tube.clickable{cursor:pointer}
+.tube.selected{transform:translateY(-7px);box-shadow:0 0 0 3px var(--accent)}
+.tube.solvedTube{box-shadow:0 0 0 3px var(--green);animation:solvedPop .35s}
+@keyframes solvedPop{0%{transform:scale(1)}40%{transform:scale(1.06)}100%{transform:scale(1)}}
+.tube.shake{animation:shake .35s}
+@keyframes shake{
+  10%,90%{transform:translateX(-2px)}
+  20%,80%{transform:translateX(4px)}
+  30%,50%,70%{transform:translateX(-6px)}
+  40%,60%{transform:translateX(6px)}
+}
+.slot{
+  height:39px;flex:0 0 39px;border-radius:7px;
+  border:1.5px dashed var(--slot-border);
+}
+.block{
+  height:39px;flex:0 0 39px;border-radius:7px;
+  box-shadow:inset 0 -2px 0 rgba(0,0,0,.12),inset 0 2px 0 rgba(255,255,255,.25);
+  animation:drop .18s ease-out;
+}
+@keyframes drop{from{transform:translateY(-14px);opacity:.4}to{transform:translateY(0);opacity:1}}
+.pink{background:var(--pink)}
+.cyan{background:var(--cyan)}
+.yellow{background:var(--yellow)}
+.green{background:var(--green)}
+.opponentNote{font-size:13px;color:var(--muted);margin-top:8px}
+.message{
+  text-align:center;min-height:26px;color:var(--muted);
+  margin:14px 0;font-size:14px
+}
+.winner{font-size:24px;font-weight:950;color:var(--text)}
+.winnerStats{font-size:14px;color:var(--muted);margin-top:4px}
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--accent);color:var(--accent-contrast);padding:12px 18px;border-radius:12px;
+  font-weight:650;font-size:14px;opacity:0;transition:.25s;pointer-events:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.2);z-index:50;max-width:90vw;text-align:center;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.modalOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;
+  padding:20px;z-index:60;
+}
+.modal{
+  background:var(--card);border-radius:20px;padding:24px;max-width:420px;width:100%;
+  border:1px solid var(--border);box-shadow:0 20px 50px rgba(0,0,0,.25);
+}
+.modal h2{margin-top:0}
+.modal ul{padding-left:18px;line-height:1.7}
+.modal .actions{justify-content:flex-end}
+.confettiPiece{
+  position:fixed;top:-20px;width:9px;height:14px;border-radius:2px;pointer-events:none;z-index:55;
+}
+@media(max-width:700px){
+  .boards{grid-template-columns:1fr}
+  .rack{gap:5px}
+  .tube{height:180px}
+  .tubeWrap{height:200px}
+  .block,.slot{height:35px;flex-basis:35px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div>
+      <h1>🎨 Color Stack</h1>
+      <div class="subtitle">Race a friend online. Different scrambled boards. First to sort all four colors wins.</div>
+    </div>
+    <div class="topRightBtns">
+      <button id="howToBtn" class="iconBtn" title="How to play">❓</button>
+      <button id="soundBtn" class="iconBtn" title="Toggle sound">🔊</button>
+      <button id="themeBtn" class="iconBtn" title="Toggle theme">🌙</button>
+    </div>
+  </div>
+
+  <section id="lobby" class="panel form">
+    <label>Your name</label>
+    <input id="name" maxlength="20" placeholder="e.g. Alex">
+
+    <div class="actions">
+      <button id="create" class="btn primary">Create Room</button>
+    </div>
+
+    <div style="text-align:center;color:var(--muted);margin:18px 0">or join a friend</div>
+
+    <label>Room code</label>
+    <input id="roomCode" maxlength="6" placeholder="ABC123" style="text-transform:uppercase">
+
+    <div class="actions">
+      <button id="join" class="btn">Join Room</button>
+    </div>
+  </section>
+
+  <section id="roomPanel" class="panel hidden">
+    <div class="room">
+      <div>
+        <div class="status">Share this room code with your friend</div>
+        <div class="codeRow">
+          <div id="roomCodeDisplay" class="code">------</div>
+          <button id="copyCode" class="btn small" title="Copy invite link">🔗 Copy invite</button>
+        </div>
+      </div>
+      <div id="roomStatus" class="status">Waiting for Player 2…</div>
+    </div>
+  </section>
+
+  <section id="gamePanel" class="panel hidden">
+    <div class="gameTop">
+      <div>
+        <strong id="turnText">Game</strong>
+        <div class="status">Click a tube, then a destination tube.</div>
+      </div>
+      <div class="timer" id="timer">02:00</div>
+    </div>
+
+    <div id="message" class="message">Waiting…</div>
+
+    <div class="boards">
+      <div class="playerCard">
+        <div class="playerHead">
+          <span id="youName">You</span>
+          <span id="youMoves">0 moves</span>
+        </div>
+        <div class="progressWrap"><div id="youProgress" class="progressBar" style="width:0%"></div></div>
+        <div id="youRack" class="rack"></div>
+      </div>
+
+      <div class="playerCard">
+        <div class="playerHead">
+          <span id="opponentName">Opponent</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:5px"></span><span id="opponentMoves">0 moves</span></span>
+        </div>
+        <div class="progressWrap"><div id="opponentProgress" class="progressBar" style="width:0%"></div></div>
+        <div id="opponentRack" class="rack"></div>
+        <div class="opponentNote">👀 Live opponent board — every move appears here instantly.</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="undo" class="btn" disabled>↩ Undo</button>
+      <button id="restart" class="btn hidden">Play Again</button>
+      <button id="leave" class="btn danger">Leave Room</button>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<div id="howToModal" class="modalOverlay hidden">
+  <div class="modal">
+    <h2>How to play</h2>
+    <ul>
+      <li>Click a tube to pick up its top color, then click another tube to pour it in.</li>
+      <li>You can only pour onto an empty tube or one whose top color matches.</li>
+      <li>Sort all four colors into their own tubes before the 2-minute timer runs out.</li>
+      <li>Your opponent's board updates live so you can watch them race.</li>
+      <li>Made a mistake? Use <strong>Undo</strong> to step back one move.</li>
+    </ul>
+    <div class="actions"><button id="closeHowTo" class="btn primary">Got it</button></div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+let myIndex = null;
+let myBoard = [];
+let selected = null;
+let roomCode = "";
+let soundOn = localStorage.getItem("cs_sound") !== "off";
+let startedAt = null;
+let lastMoves = 0;
+let confettiFired = false;
+
+const $ = id => document.getElementById(id);
+
+// ---------- theme ----------
+function applyTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  $("themeBtn").textContent = theme === "dark" ? "☀️" : "🌙";
+  localStorage.setItem("cs_theme", theme);
+}
+applyTheme(localStorage.getItem("cs_theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+$("themeBtn").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  applyTheme(cur === "dark" ? "light" : "dark");
+};
+
+// ---------- sound ----------
+function updateSoundBtn(){ $("soundBtn").textContent = soundOn ? "🔊" : "🔇"; }
+updateSoundBtn();
+$("soundBtn").onclick = () => {
+  soundOn = !soundOn;
+  localStorage.setItem("cs_sound", soundOn ? "on" : "off");
+  updateSoundBtn();
+};
+
+let audioCtx;
+function beep(freq, dur, type="sine", vol=0.08){
+  if(!soundOn) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = vol;
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    osc.stop(audioCtx.currentTime + dur);
+  }catch(e){}
+}
+function soundMove(){ beep(520, 0.12, "sine", 0.07); }
+function soundError(){ beep(160, 0.18, "square", 0.06); }
+function soundWin(){
+  [523,659,784,1047].forEach((f,i) => setTimeout(() => beep(f, 0.25, "triangle", 0.09), i*110));
+}
+
+// ---------- toast ----------
+let toastTimer;
+function toast(text){
+  const el = $("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2400);
+}
+
+// ---------- how to play modal ----------
+$("howToBtn").onclick = () => $("howToModal").classList.remove("hidden");
+$("closeHowTo").onclick = () => $("howToModal").classList.add("hidden");
+$("howToModal").addEventListener("click", e => {
+  if(e.target === $("howToModal")) $("howToModal").classList.add("hidden");
+});
+
+// ---------- confetti ----------
+function fireConfetti(){
+  const colors = ["#ed5f9d","#49bdd5","#e8c443","#62b97a"];
+  for(let i=0;i<60;i++){
+    const piece = document.createElement("div");
+    piece.className = "confettiPiece";
+    piece.style.left = Math.random()*100 + "vw";
+    piece.style.background = colors[Math.floor(Math.random()*colors.length)];
+    piece.style.transform = `rotate(${Math.random()*360}deg)`;
+    document.body.appendChild(piece);
+    const duration = 1800 + Math.random()*1400;
+    const drift = (Math.random()-0.5)*200;
+    piece.animate([
+      { transform: piece.style.transform + " translate(0,0)", opacity: 1 },
+      { transform: `rotate(${Math.random()*720}deg) translate(${drift}px, 100vh)`, opacity: 0.9 }
+    ], { duration, easing: "cubic-bezier(.2,.6,.4,1)" });
+    setTimeout(() => piece.remove(), duration + 50);
+  }
+}
+
+// ---------- helpers ----------
+function show(id, visible=true){
+  $(id).classList.toggle("hidden", !visible);
+}
+
+function setMessage(text, winner=false, stats=""){
+  $("message").innerHTML = winner
+    ? `<div class="winner">${text}</div>${stats ? `<div class="winnerStats">${stats}</div>` : ""}`
+    : text;
+}
+
+function isTubeSolved(tube){
+  return tube.length === 4 && tube.every(c => c === tube[0]);
+}
+
+function renderBoard(target, board, interactive){
+  target.innerHTML = "";
+
+  board.forEach((tube, index) => {
+    const wrap = document.createElement("div");
+    wrap.className = "tubeWrap";
+
+    const btn = document.createElement("button");
+    btn.className = "tube " + (interactive ? "clickable " : "") +
+      (selected === index ? "selected " : "") +
+      (isTubeSolved(tube) ? "solvedTube " : "");
+    btn.type = "button";
+
+    for(let i=0;i<4;i++){
+      if(i < tube.length){
+        const block = document.createElement("div");
+        block.className = "block " + tube[i];
+        btn.appendChild(block);
+      }else{
+        const slot = document.createElement("div");
+        slot.className = "slot";
+        btn.appendChild(slot);
+      }
+    }
+
+    if(interactive){
+      btn.addEventListener("click", () => handleTube(index, btn));
+    }else{
+      btn.disabled = true;
+    }
+
+    wrap.appendChild(btn);
+    target.appendChild(wrap);
+  });
+}
+
+function renderGame(state){
+  if(state.you){
+    myIndex = state.you.index;
+    myBoard = state.you.board;
+    $("youMoves").textContent = `${state.you.moves} moves`;
+    renderBoard($("youRack"), state.you.board, true);
+    $("undo").disabled = !state.you.canUndo;
+
+    const solvedTubes = state.you.board.filter(isTubeSolved).length;
+    $("youProgress").style.width = (solvedTubes/4*100) + "%";
+
+    if(state.you.moves > lastMoves){ soundMove(); }
+    lastMoves = state.you.moves;
+  }
+
+  if(state.opponent){
+    $("opponentName").textContent = state.opponent.name;
+    $("opponentMoves").textContent = `${state.opponent.moves} moves`;
+    if(state.opponent.board){
+      renderBoard($("opponentRack"), state.opponent.board, false);
+      const oppSolved = state.opponent.board.filter(isTubeSolved).length;
+      $("opponentProgress").style.width = (oppSolved/4*100) + "%";
+    }
+  }
+
+  if(state.opponent && state.you){
+    $("turnText").textContent = state.winner === null
+      ? "Race in progress"
+      : "Race finished";
+  }
+
+  const left = Math.max(0, state.timeLeft || 0);
+  const min = Math.floor(left / 60);
+  const sec = left % 60;
+  $("timer").textContent =
+    String(min).padStart(2,"0") + ":" + String(sec).padStart(2,"0");
+  $("timer").classList.toggle("lowTime", left <= 15 && state.winner === null);
+
+  if(state.winner !== null){
+    $("restart").classList.remove("hidden");
+    $("undo").disabled = true;
+    const elapsed = 120 - left;
+    const em = Math.floor(elapsed/60), es = elapsed%60;
+    const timeStr = `${em}:${String(es).padStart(2,"0")}`;
+
+    if(state.winner === "time"){
+      setMessage("⏰ Time is up!");
+    }else if(state.winner === myIndex){
+      setMessage("🏆 YOU WIN!", true, `Solved in ${state.you.moves} moves · ${timeStr}`);
+      if(!confettiFired){ fireConfetti(); soundWin(); confettiFired = true; }
+    }else{
+      setMessage("😅 Your friend won!", true, `They finished in ${timeStr}`);
+    }
+  }else{
+    $("restart").classList.add("hidden");
+    confettiFired = false;
+  }
+}
+
+function shakeTube(btn){
+  if(!btn) return;
+  btn.classList.add("shake");
+  setTimeout(() => btn.classList.remove("shake"), 350);
+}
+
+function handleTube(index, btn){
+  if(selected === null){
+    if(!myBoard[index].length){
+      toast("That tube is empty.");
+      shakeTube(btn);
+      return;
+    }
+    selected = index;
+    setMessage("Now click an empty tube or a tube with the same top color.");
+    renderBoard($("youRack"), myBoard, true);
+    return;
+  }
+
+  if(selected === index){
+    selected = null;
+    renderBoard($("youRack"), myBoard, true);
+    return;
+  }
+
+  socket.emit("game:move", {from:selected, to:index});
+  selected = null;
+}
+
+$("create").onclick = () => {
+  const name = $("name").value.trim() || "Player 1";
+  socket.emit("room:create", {name});
+};
+
+$("join").onclick = () => {
+  const name = $("name").value.trim() || "Player 2";
+  const code = $("roomCode").value.trim().toUpperCase();
+  if(code.length !== 6){
+    toast("Enter the 6-character room code.");
+    return;
+  }
+  socket.emit("room:join", {code, name});
+};
+
+$("undo").onclick = () => socket.emit("game:undo");
+$("restart").onclick = () => { confettiFired = false; socket.emit("game:restart"); };
+
+$("leave").onclick = () => {
+  location.href = location.pathname;
+};
+
+$("copyCode").onclick = async () => {
+  const url = `${location.origin}${location.pathname}?code=${roomCode}`;
+  try{
+    await navigator.clipboard.writeText(url);
+    toast("Invite link copied!");
+  }catch(e){
+    toast(`Room code: ${roomCode}`);
+  }
+};
+
+// Prefill join code from ?code= in URL
+const urlCode = new URLSearchParams(location.search).get("code");
+if(urlCode){ $("roomCode").value = urlCode.toUpperCase(); }
+
+socket.on("room:created", ({code, index, name}) => {
+  roomCode = code;
+  myIndex = index;
+  $("youName").textContent = name || "Player 1";
+  $("roomCodeDisplay").textContent = code;
+  show("lobby", false);
+  show("roomPanel", true);
+  $("roomStatus").textContent = "Waiting for Player 2…";
+});
+
+socket.on("room:joined", ({code, index, name}) => {
+  roomCode = code;
+  myIndex = index;
+  $("youName").textContent = name || "Player 2";
+  $("roomCodeDisplay").textContent = code;
+  show("lobby", false);
+  show("roomPanel", true);
+  $("roomStatus").textContent = "2 players connected!";
+  show("gamePanel", true);
+});
+
+socket.on("room:update", room => {
+  roomCode = room.code;
+  $("roomCodeDisplay").textContent = room.code;
+
+  if(room.players.length < 2){
+    $("roomStatus").textContent = "Waiting for Player 2…";
+    show("gamePanel", false);
+    return;
+  }
+
+  $("roomStatus").textContent = "2 players connected!";
+  if (myIndex === null) myIndex = 0;
+  const me = room.players[myIndex];
+  const other = room.players[1 - myIndex];
+  if (me) $("youName").textContent = me.name;
+  if (other) $("opponentName").textContent = other.name;
+  show("gamePanel", true);
+});
+
+socket.on("game:state", state => {
+  show("gamePanel", true);
+  show("roomPanel", true);
+  renderGame(state);
+});
+
+socket.on("room:error", msg => toast(msg));
+
+socket.on("game:error", msg => {
+  setMessage("❌ " + msg);
+  toast(msg);
+});
+
+socket.on("room:closed", msg => {
+  toast(msg);
+  setTimeout(() => location.href = location.pathname, 1200);
+});
+</script>
+</body>
+</html>
